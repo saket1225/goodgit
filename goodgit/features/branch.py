@@ -58,3 +58,6 @@ def new_branch(branch_name=""):
     if last_commit_message.strip() == "TEMP_COMMIT":
         print(f"Undoing temporary commit in {branch_name}...")
         subprocess.run(["git", "reset", "HEAD~"])
+
+
+switch_branch()

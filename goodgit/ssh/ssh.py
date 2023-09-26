@@ -1,3 +1,4 @@
+
 import requests
 import time
 import webbrowser
@@ -9,47 +10,84 @@ import configparser
 import json
 import git
 
-def load_accounts():
-    home = os.path.expanduser("~")
-    filepath = os.path.join(home, ".goodgit", "accounts.json")
-    ssh_folder_path = os.path.join(home, ".goodgit", "ssh")
-    
+def load_accounts_from_config():
+    config_path = os.path.expanduser("~/.ssh/config")
+    accounts = {}
     try:
-        with open(filepath, 'r') as f:
-            accounts = json.load(f)
+        with open(config_path, 'r') as f:
+            lines = f.readlines()
+        host = None
+        for line in lines:
+            if "Host " in line:
+                host = line.split("Host ")[1].strip()
+            if "User git" in line and host:
+                username = host.split("github-")[-1]
+                accounts[username] = host
     except FileNotFoundError:
         return {}
-    
-    # Check if SSH folders exist for each account
-    for email, data in list(accounts.items()):  # Use list() to make a copy since we might modify the dict
-        folder_name = f".ssh_{email.replace('@', '_').replace('.', '_')}"
-        full_folder_path = os.path.join(ssh_folder_path, folder_name)
-        
-        if not os.path.exists(full_folder_path):
-            print(f"SSH folder for {email} is missing. Removing from accounts.")
-            del accounts[email]
-    
-    # Save the updated accounts back to the JSON file
-    with open(filepath, 'w') as f:
-        json.dump(accounts, f)
-    
     return accounts
 
 
-def save_accounts(accounts):
+def is_default_account_set():
+    config_path = os.path.expanduser("~/.ssh/config")
+    try:
+        with open(config_path, "r") as f:
+            lines = f.readlines()
+        for line in lines:
+            if "Host github.com" in line.strip():
+                return True
+    except FileNotFoundError:
+        return False
+    return False
+
+
+def save_accounts(accounts, default_username=None):
     home = os.path.expanduser("~")
     folder_path = os.path.join(home, ".goodgit")
     if not os.path.exists(folder_path):
         os.makedirs(folder_path)
     filepath = os.path.join(folder_path, "accounts.json")
+    data = {'accounts': accounts}
+    if default_username:
+        data['default_username'] = default_username
     with open(filepath, 'w') as f:
-        json.dump(accounts, f)
+        json.dump(data, f)
 
-# New function to list accounts
+# New function to update JSON config
+def update_json_config(email, host, action="add"):
+    config_path = os.path.expanduser("~/.ssh/goodgit/config.json")
+    try:
+        if os.path.exists(config_path):
+            with open(config_path, 'r') as f:
+                data = json.load(f)
+        else:
+            data = {"accounts": []}
+
+        account_info = {"email": f"{email}(github.com)", "host": host}
+
+        if action == "add":
+            data["accounts"].append(account_info)
+        elif action == "remove":
+            data["accounts"] = [account for account in data["accounts"] if account != account_info]
+
+        with open(config_path, 'w') as f:
+            json.dump(data, f)
+    except Exception as e:
+        print(f"An error occurred while updating the JSON config: {e}")
+
+# Updated function to list accounts
 def list_accounts(accounts):
-    print("Available accounts:")
-    for idx, email in enumerate(accounts.keys()):
-        print(f"{idx+1}. {email}")
+    config_path = os.path.expanduser("~/.ssh/goodgit/config.json")
+    try:
+        with open(config_path, 'r') as f:
+            data = json.load(f)
+        accounts = data.get('accounts', [])
+        print("Available accounts:")
+        for idx, account in enumerate(accounts):
+            print(f"{idx+1}. {account['email']}")
+    except FileNotFoundError:
+        print("No accounts found.")
+
 
 def get_detailed_os_name():
     system_name = platform.system()
@@ -72,7 +110,8 @@ def get_detailed_os_name():
 def generate_ssh_key(email, folder):
     try:
         home = os.path.expanduser("~")
-        goodgit_folder = os.path.join(home, ".goodgit", "ssh", folder)
+        username = email.split('@')[0]  # Extract username from email
+        goodgit_folder = os.path.join(home, ".ssh", "goodgit", f'.ssh_{username}')  # Use only username for folder
         
         # Create the folder if it doesn't exist
         if not os.path.exists(goodgit_folder):
@@ -115,9 +154,31 @@ def read_git_config():
     except (git.InvalidGitRepositoryError, git.GitCommandError, KeyError):
         return None, None
 
+def update_ssh_config(username, make_default=False):
+    config_path = os.path.expanduser("~/.ssh/config")
+    config_entry_general = f"""Host github-{username}
+    HostName github.com
+    User git
+    IdentityFile ~/.ssh/goodgit/.ssh_{username}/id_rsa
+    """
+    config_entry_default = f"""Host github.com
+    HostName github.com
+    User git
+    IdentityFile ~/.ssh/goodgit/.ssh_{username}/id_rsa
+    """
+    try:
+        with open(config_path, "a") as f:
+            if make_default:
+                f.write("\n" + config_entry_default)  # Add as default
+            f.write("\n" + config_entry_general)  # Add as general
+        print("SSH config updated successfully.")
+    except Exception as e:
+        print(f"Failed to update SSH config: {e}")
+
+
 
 def github_device_auth(email=None):
-    accounts = load_accounts()
+    accounts = load_accounts_from_config()
     if accounts:
         print("You have the following accounts already set up:")
         list_accounts(accounts)
@@ -179,3 +240,68 @@ def github_device_auth(email=None):
             else:
                 print("An error occurred.")
                 return None, None  # Return None values if an error occurs
+
+    if ssh_key:
+        add_ssh_key(r_json['access_token'], title, ssh_key)
+        
+        # Check if SSH config exists
+        config_exists = os.path.exists(os.path.expanduser("~/.ssh/config"))
+        
+        if not config_exists:
+            make_default = input("Do you want to make this the default GitHub account? (y/n): ")
+            if make_default.lower() == 'y':
+                update_ssh_config(username, make_default=True)
+            else:
+                default_email = input("Enter the email for the default GitHub account: ")
+                # Generate SSH for default account and update config
+                # (Assuming you have a function to generate SSH for a given email)
+                generate_ssh_for_default_account(default_email)
+        
+        else:
+            update_ssh_config(username)
+
+
+def main():
+    accounts = load_accounts_from_config()
+
+    if accounts:
+        list_accounts(accounts)
+
+    choice = input("Do you want to add a new account? (y/n): ")
+
+    if choice.lower() == 'y':
+        email = input("Enter your email (Same as your GitHub account): ")
+        email, token = github_device_auth(email)
+        
+        if email and token:
+            username = email.split('@')[0]
+            host = accounts.get(username, f"github-{username}")  # Fetch the host for this username
+            update_json_config(email, host, action="add")  # Update JSON config with the host
+
+            config_exists = os.path.exists(os.path.expanduser("~/.ssh/config"))
+
+            if not config_exists or os.path.getsize(os.path.expanduser("~/.ssh/config")) == 0:
+                make_default = input("This is your first SSH key. Do you want to make this the default GitHub account? (y/n): ")
+                if make_default.lower() == 'y':
+                    update_ssh_config(username, make_default=True)
+                else:
+                    default_email = input("Enter the email for the default GitHub account: ")
+                    generate_ssh_for_default_account(default_email)
+                    update_ssh_config(default_email.split('@')[0])
+            else:
+                if not is_default_account_set():
+                    make_default = input("Do you want to make this the default GitHub account? (y/n): ")
+                    if make_default.lower() == 'y':
+                        update_ssh_config(username, make_default=True)
+                    else:
+                        default_email = input("Enter the email for the default GitHub account: ")
+                        generate_ssh_for_default_account(default_email)
+                        update_ssh_config(default_email.split('@')[0])
+                else:
+                    update_ssh_config(username)  # <-- This line was missing, it adds the new account to SSH config
+
+    print("\nAll available accounts:")
+    list_accounts(load_accounts_from_config())  # Reload accounts to include the newly added one
+
+if __name__ == "__main__":
+    main()
