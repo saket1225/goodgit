@@ -1,0 +1,3 @@
+from .commit import *
+
+main()
