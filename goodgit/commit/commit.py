@@ -4,7 +4,7 @@ import requests
 import json
 import questionary
 from rich import print, highlighter
-from utils import is_git_repo  # Importing the common function
+from goodgit.utils import is_git_repo  # Importing the common function
 
 def get_git_diff():
     result = subprocess.run(["git", "diff", "HEAD"], capture_output=True, text=True)

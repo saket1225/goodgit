@@ -252,10 +252,7 @@ def github_device_auth(email=None):
             if make_default.lower() == 'y':
                 update_ssh_config(username, make_default=True)
             else:
-                default_email = input("Enter the email for the default GitHub account: ")
-                # Generate SSH for default account and update config
-                # (Assuming you have a function to generate SSH for a given email)
-                generate_ssh_for_default_account(default_email)
+                return;
         
         else:
             update_ssh_config(username)
@@ -285,20 +282,16 @@ def main():
                 if make_default.lower() == 'y':
                     update_ssh_config(username, make_default=True)
                 else:
-                    default_email = input("Enter the email for the default GitHub account: ")
-                    generate_ssh_for_default_account(default_email)
-                    update_ssh_config(default_email.split('@')[0])
+                    return;
             else:
                 if not is_default_account_set():
                     make_default = input("Do you want to make this the default GitHub account? (y/n): ")
                     if make_default.lower() == 'y':
                         update_ssh_config(username, make_default=True)
                     else:
-                        default_email = input("Enter the email for the default GitHub account: ")
-                        generate_ssh_for_default_account(default_email)
-                        update_ssh_config(default_email.split('@')[0])
+                        return;
                 else:
-                    update_ssh_config(username)  # <-- This line was missing, it adds the new account to SSH config
+                    update_ssh_config(username) # it adds the new account to SSH config
 
     print("\nAll available accounts:")
     list_accounts(load_accounts_from_config())  # Reload accounts to include the newly added one
